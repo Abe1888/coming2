@@ -908,6 +908,7 @@ function DemoVanilla() {
     groundPlane.rotation.x = -Math.PI / 2;
     groundPlane.position.set(0, -1.46, 0);
     groundPlane.receiveShadow = true;
+    groundPlane.visible = false; // Hide ground until truck loads
     scene.add(groundPlane);
 
     // ===== GRID =====
@@ -976,6 +977,7 @@ function DemoVanilla() {
     road.rotation.set(Math.PI / 2, 0, -Math.PI / 2);
     road.position.set(0, -1.45, 0);
     road.receiveShadow = true;
+    road.visible = false; // Hide road until truck loads
     scene.add(road);
 
     // ===== TRUCK =====
@@ -1114,6 +1116,10 @@ function DemoVanilla() {
         model.scale.set(truckConfig.scale[0], truckConfig.scale[1], truckConfig.scale[2]);
         model.rotation.y = 0; // Rotation handled by truckGroup
         truckGroup.add(model);
+        
+        // Show road and ground plane now that truck is loaded
+        road.visible = true;
+        groundPlane.visible = true;
         
         if (DEBUG) console.log('✓ Truck added to scene');
 
