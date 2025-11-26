@@ -3,9 +3,13 @@ import ReactDOM from 'react-dom/client';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { createFuelTankSensor } from './utils/createFuelTankSensor';
 import { createCargoLock } from './utils/createCargoLock';
+
+// Debug flag - set to false for production to gain +2-3 FPS
+const DEBUG = false;
 
 // --- AUDIO SYSTEM ---
 class AudioSystem {
@@ -455,7 +459,7 @@ function DemoVanilla() {
   const [truckConfig, setTruckConfig] = useState({
     position: [-3.4, -1.4, 0] as [number, number, number],
     rotation: [0, Math.PI / 2, 0] as [number, number, number],
-    scale: [50, 50, 50] as [number, number, number]
+    scale: [1, 1, 1] as [number, number, number] // Scale 1.5 baked into OBJ export
   });
   
   // Fuel sensor state
@@ -609,7 +613,7 @@ function DemoVanilla() {
         );
       }
       
-      console.log('🚛 Truck position updated:', truckConfig);
+      if (DEBUG) console.log('🚛 Truck position updated:', truckConfig);
     }
   }, [truckConfig]);
   
@@ -652,7 +656,7 @@ function DemoVanilla() {
                 if (model) {
                   model.scale.set(scl[0], scl[1], scl[2]);
                 }
-                console.log('🚛 Truck updated from controller:', newValue);
+                if (DEBUG) console.log('🚛 Truck updated from controller:', newValue);
               }
             }
             break;
@@ -660,7 +664,7 @@ function DemoVanilla() {
             if (newValue) {
               setCameraKeyframes(newValue);
               cameraKeyframesRef.current = newValue;
-              console.log('📹 Camera updated from controller');
+              if (DEBUG) console.log('📹 Camera updated from controller');
             }
             break;
           case 'fuel-sensor-config':
@@ -673,7 +677,7 @@ function DemoVanilla() {
                 fuelSensorGroupRef.current.position.set(pos[0], pos[1], pos[2]);
                 fuelSensorGroupRef.current.rotation.set(rot[0], rot[1], rot[2]);
                 fuelSensorGroupRef.current.scale.setScalar(newValue.scale);
-                console.log('⛽ Fuel sensor updated from controller:', newValue);
+                if (DEBUG) console.log('⛽ Fuel sensor updated from controller:', newValue);
               }
             }
             break;
@@ -686,7 +690,7 @@ function DemoVanilla() {
                 const rot = newValue.rotation as [number, number, number];
                 cargoLockGroupRef.current.position.set(pos[0], pos[1], pos[2]);
                 cargoLockGroupRef.current.rotation.set(rot[0], rot[1], rot[2]);
-                console.log('🔒 Cargo lock updated from controller:', newValue);
+                if (DEBUG) console.log('🔒 Cargo lock updated from controller:', newValue);
               }
             }
             break;
@@ -694,13 +698,13 @@ function DemoVanilla() {
             if (newValue) {
               setIsMuted(newValue.isMuted);
               audioSysRef.current?.toggleMute(newValue.isMuted);
-              console.log('🔊 Audio updated from controller:', newValue.isMuted ? 'OFF' : 'ON');
+              if (DEBUG) console.log('🔊 Audio updated from controller:', newValue.isMuted ? 'OFF' : 'ON');
             }
             break;
           case 'trigger-horn':
             if (newValue && !isMuted) {
               audioSysRef.current?.triggerHorn();
-              console.log('📯 Horn triggered from controller');
+              if (DEBUG) console.log('📯 Horn triggered from controller');
             }
             break;
         }
@@ -719,36 +723,12 @@ function DemoVanilla() {
     // ===== STATE =====
     let mode = 'SCAN'; // 'SCAN' or 'BLUEPRINT'
     let gridVisible = false;
-    let wheelRotation = 0;
-
-    // ===== WHEEL CONFIGURATION =====
-    const wheelConfig = {
-      axle001_A_position: [0.028, -0.048, 0.014] as [number, number, number],
-      axle001_B_position: [-0.028, -0.048, 0.014] as [number, number, number],
-      axle003_position: [0, 0.039, 0.013] as [number, number, number],
-      Obj_axle004_position: [0, 0.075, 0.012] as [number, number, number],
-      axle004_position: [0, 0.189, 0.014] as [number, number, number],
-      axle005_position: [0, 0.222, 0.014] as [number, number, number],
-      axle006_position: [0, 0.256, 0.014] as [number, number, number],
-      rotationSpeed: 7.9  // Custom wheel rotation speed
-    };
-
-    // Store original wheel positions
-    const originalWheelPositions: {
-      axle001_A?: THREE.Vector3;
-      axle001_B?: THREE.Vector3;
-      axle003?: THREE.Vector3;
-      Obj_axle004?: THREE.Vector3;
-      axle004?: THREE.Vector3;
-      axle005?: THREE.Vector3;
-      axle006?: THREE.Vector3;
-    } = {};
 
     // ===== SCENE SETUP =====
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xebebeb);
     scene.fog = new THREE.FogExp2(0xe8e8e8, 0.022);
-    console.log('✓ Scene created with background:', scene.background);
+    if (DEBUG) console.log('✓ Scene created with background:', scene.background);
 
     // ===== CAMERA =====
     const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 2000);
@@ -770,7 +750,7 @@ function DemoVanilla() {
     // Allow wheel events to pass through canvas for page scrolling
     renderer.domElement.style.pointerEvents = 'auto';
     
-    console.log('✓ Renderer created and mounted');
+    if (DEBUG) console.log('✓ Renderer created and mounted');
 
     // ===== ORBIT CONTROLS =====
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -785,12 +765,12 @@ function DemoVanilla() {
     // Track when user manually controls camera
     controls.addEventListener('start', () => {
       isUserDraggingRef.current = true;
-      console.log('🖱️ User took manual control');
+      if (DEBUG) console.log('🖱️ User took manual control');
     });
 
     controls.addEventListener('end', () => {
       isUserDraggingRef.current = false;
-      console.log('📜 Scroll-based camera resumed');
+      if (DEBUG) console.log('📜 Scroll-based camera resumed');
     });
 
     // ===== CAMERA KEYFRAMES (Scroll-Based) =====
@@ -893,14 +873,16 @@ function DemoVanilla() {
     const dirLight1 = new THREE.DirectionalLight(0xf0f0f0, 1.2);
     dirLight1.position.set(0, 15, 8);
     dirLight1.castShadow = true;
-    dirLight1.shadow.mapSize.width = 2048;
-    dirLight1.shadow.mapSize.height = 2048;
-    dirLight1.shadow.camera.left = -20;
-    dirLight1.shadow.camera.right = 20;
-    dirLight1.shadow.camera.top = 20;
-    dirLight1.shadow.camera.bottom = -20;
-    dirLight1.shadow.camera.near = 0.1;
-    dirLight1.shadow.camera.far = 50;
+    // OPTIMIZED: Reduced from 2048 to 1024 for +5-8 FPS (4x less GPU cost)
+    dirLight1.shadow.mapSize.width = 1024;
+    dirLight1.shadow.mapSize.height = 1024;
+    // OPTIMIZED: Tightened frustum from ±20 to ±15 for better shadow quality
+    dirLight1.shadow.camera.left = -15;
+    dirLight1.shadow.camera.right = 15;
+    dirLight1.shadow.camera.top = 15;
+    dirLight1.shadow.camera.bottom = -15;
+    dirLight1.shadow.camera.near = 0.5;
+    dirLight1.shadow.camera.far = 40;
     dirLight1.shadow.bias = -0.0001;
     dirLight1.shadow.radius = 4;
     scene.add(dirLight1);
@@ -1006,121 +988,40 @@ function DemoVanilla() {
     // Store reference for updates
     truckGroupRef.current = truckGroup;
 
-    const wheelRefs: {
-      axle001_A: THREE.Mesh | null;
-      axle001_B: THREE.Mesh | null;
-      axle003: THREE.Mesh | null;
-      Obj_axle004: THREE.Mesh | null;
-      axle004: THREE.Mesh | null;
-      axle005: THREE.Mesh | null;
-      axle006: THREE.Mesh | null;
-    } = {
-      axle001_A: null,
-      axle001_B: null,
-      axle003: null,
-      Obj_axle004: null,
-      axle004: null,
-      axle005: null,
-      axle006: null
-    };
-
     let fuelTankMesh: THREE.Mesh | null = null;
+
+    // Setup Draco Loader for compressed GLB
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    dracoLoader.setDecoderConfig({ type: 'js' }); // Use JS decoder for better compatibility
 
     // Load truck model
     const loader = new GLTFLoader();
+    loader.setDRACOLoader(dracoLoader); // Enable Draco compression support
     loader.setMeshoptDecoder(MeshoptDecoder);
     
-    console.log('🚛 Loading truck model...');
+    if (DEBUG) console.log('🚛 Loading truck model with Draco compression...');
     loader.load(
-      '/model/Main_truck_FINAL_opt2.glb',
+      '/model/Main_truck_updated_compressed.glb', // Updated OBJ with better naming (1.48 MB)
       (gltf) => {
-        console.log('✅ Truck model loaded successfully!');
+        if (DEBUG) console.log('✅ Truck model loaded successfully!');
         const model = gltf.scene;
         
-        // Apply materials and find wheels
+        // DEBUG: Log all mesh names to find fuel tank
+        if (DEBUG) {
+          console.log('🔍 Scanning all meshes in model:');
+          model.traverse((node) => {
+            if (node instanceof THREE.Mesh) {
+              console.log('  - Mesh found:', node.name, '| Type:', node.type);
+            }
+          });
+        }
+        
+        // Apply materials
         model.traverse((node) => {
-          // Find wheel meshes
-          if (node.name === 'axle001_A' && node instanceof THREE.Mesh) {
-            wheelRefs.axle001_A = node;
-            node.geometry = node.geometry.clone();
-            node.geometry.center();
-            // Store original position and apply offset
-            originalWheelPositions.axle001_A = node.position.clone();
-            node.position.x += wheelConfig.axle001_A_position[0];
-            node.position.y += wheelConfig.axle001_A_position[1];
-            node.position.z += wheelConfig.axle001_A_position[2];
-            console.log('✓ Found axle001_A - position adjusted');
-          }
-          if (node.name === 'axle001_B' && node instanceof THREE.Mesh) {
-            wheelRefs.axle001_B = node;
-            node.geometry = node.geometry.clone();
-            node.geometry.center();
-            // Store original position and apply offset
-            originalWheelPositions.axle001_B = node.position.clone();
-            node.position.x += wheelConfig.axle001_B_position[0];
-            node.position.y += wheelConfig.axle001_B_position[1];
-            node.position.z += wheelConfig.axle001_B_position[2];
-            console.log('✓ Found axle001_B - position adjusted');
-          }
-          if (node.name === 'axle003' && node instanceof THREE.Mesh) {
-            wheelRefs.axle003 = node;
-            node.geometry = node.geometry.clone();
-            node.geometry.center();
-            // Store original position and apply offset
-            originalWheelPositions.axle003 = node.position.clone();
-            node.position.x += wheelConfig.axle003_position[0];
-            node.position.y += wheelConfig.axle003_position[1];
-            node.position.z += wheelConfig.axle003_position[2];
-            console.log('✓ Found axle003 - position adjusted');
-          }
-          if (node.name === 'Obj_axle004' && node instanceof THREE.Mesh) {
-            wheelRefs.Obj_axle004 = node;
-            node.geometry = node.geometry.clone();
-            node.geometry.center();
-            // Store original position and apply offset
-            originalWheelPositions.Obj_axle004 = node.position.clone();
-            node.position.x += wheelConfig.Obj_axle004_position[0];
-            node.position.y += wheelConfig.Obj_axle004_position[1];
-            node.position.z += wheelConfig.Obj_axle004_position[2];
-            console.log('✓ Found Obj_axle004 - position adjusted');
-          }
-          if (node.name === 'axle004' && node instanceof THREE.Mesh) {
-            wheelRefs.axle004 = node;
-            node.geometry = node.geometry.clone();
-            node.geometry.center();
-            // Store original position and apply offset
-            originalWheelPositions.axle004 = node.position.clone();
-            node.position.x += wheelConfig.axle004_position[0];
-            node.position.y += wheelConfig.axle004_position[1];
-            node.position.z += wheelConfig.axle004_position[2];
-            console.log('✓ Found axle004 - position adjusted');
-          }
-          if (node.name === 'axle005' && node instanceof THREE.Mesh) {
-            wheelRefs.axle005 = node;
-            node.geometry = node.geometry.clone();
-            node.geometry.center();
-            // Store original position and apply offset
-            originalWheelPositions.axle005 = node.position.clone();
-            node.position.x += wheelConfig.axle005_position[0];
-            node.position.y += wheelConfig.axle005_position[1];
-            node.position.z += wheelConfig.axle005_position[2];
-            console.log('✓ Found axle005 - position adjusted');
-          }
-          if (node.name === 'axle006' && node instanceof THREE.Mesh) {
-            wheelRefs.axle006 = node;
-            node.geometry = node.geometry.clone();
-            node.geometry.center();
-            // Store original position and apply offset
-            originalWheelPositions.axle006 = node.position.clone();
-            node.position.x += wheelConfig.axle006_position[0];
-            node.position.y += wheelConfig.axle006_position[1];
-            node.position.z += wheelConfig.axle006_position[2];
-            console.log('✓ Found axle006 - position adjusted');
-          }
-
           if (node instanceof THREE.Mesh) {
-            // Glass material
-            if (node.name === 'Glass') {
+            // Glass material - Updated naming
+            if (node.name === 'Glass' || node.name === 'Cab_Glass' || node.name.toLowerCase().includes('glass')) {
               node.material = new THREE.MeshStandardMaterial({
                 color: 0x333333,
                 transparent: true,
@@ -1131,23 +1032,39 @@ function DemoVanilla() {
               });
               node.castShadow = true;
               node.receiveShadow = true;
+              if (DEBUG) console.log('✓ Found Glass:', node.name);
               return;
             }
 
-            // Fuel tank material
-            if (node.name === 'Fuel_tank') {
+            // Fuel tank material - Highly transparent to see sensor inside
+            if (node.name === 'Fuel_tank' || node.name.toLowerCase().includes('fuel_tank')) {
               fuelTankMesh = node; // Store reference for sensor mounting
-              node.material = new THREE.MeshStandardMaterial({
-                color: 0x000000,
+              
+              // Force dispose old material if exists
+              if (node.material) {
+                (node.material as THREE.Material).dispose();
+              }
+              
+              // Create new transparent material
+              node.material = new THREE.MeshPhysicalMaterial({
+                color: 0x2a2a2a,
                 transparent: true,
-                opacity: 0.3,
-                roughness: 0.7,
-                metalness: 0.2,
-                side: THREE.DoubleSide
+                opacity: 0.08, // Very transparent (92% see-through)
+                roughness: 0.2,
+                metalness: 0.6,
+                transmission: 0.9, // Glass-like transmission
+                thickness: 0.5,
+                ior: 1.5, // Index of refraction (glass)
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                alphaTest: 0
               });
-              node.castShadow = true;
+              
+              node.castShadow = false; // Disable shadow for better transparency
               node.receiveShadow = true;
-              console.log('✓ Found Fuel_tank - will mount sensor');
+              node.renderOrder = 1; // Render after opaque objects
+              
+              if (DEBUG) console.log('✓ Found Fuel_tank - highly transparent material applied');
               return;
             }
 
@@ -1159,18 +1076,38 @@ function DemoVanilla() {
               side: THREE.DoubleSide
             });
 
-            // Add edges
-            const edgesGeometry = new THREE.EdgesGeometry(node.geometry, 15);
-            const edgesMaterial = new THREE.LineBasicMaterial({
-              color: 0x808080,
-              transparent: true,
-              opacity: 0.85
-            });
-            const edgesLine = new THREE.LineSegments(edgesGeometry, edgesMaterial);
-            node.add(edgesLine);
+            // OPTIMIZED: Only add edges to major components (+3-5 FPS)
+            // Skip small parts (bolts, screws, nuts, washers, rivets, brackets)
+            const majorComponents = ['Cab', 'Container', 'Frame', 'Chassis', 'Wheel', 'Door', 'Hood', 'Roof'];
+            const smallParts = ['bolt', 'screw', 'nut', 'washer', 'rivet', 'bracket', 'clip', 'pin'];
+            
+            const isMajorComponent = majorComponents.some(part => 
+              node.name.toLowerCase().includes(part.toLowerCase())
+            );
+            const isSmallPart = smallParts.some(part => 
+              node.name.toLowerCase().includes(part.toLowerCase())
+            );
+            
+            // Only add edges to major components (not small parts)
+            if (isMajorComponent && !isSmallPart) {
+              const edgesGeometry = new THREE.EdgesGeometry(node.geometry, 15);
+              const edgesMaterial = new THREE.LineBasicMaterial({
+                color: 0x808080,
+                transparent: true,
+                opacity: 0.85
+              });
+              const edgesLine = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+              node.add(edgesLine);
+            }
 
-            node.castShadow = true;
-            node.receiveShadow = true;
+            // OPTIMIZED: Disable shadows for small parts (+3-5 FPS additional)
+            if (isSmallPart) {
+              node.castShadow = false;
+              node.receiveShadow = false;
+            } else {
+              node.castShadow = true;
+              node.receiveShadow = true;
+            }
           }
         });
 
@@ -1178,7 +1115,7 @@ function DemoVanilla() {
         model.rotation.y = 0; // Rotation handled by truckGroup
         truckGroup.add(model);
         
-        console.log('✓ Truck added to scene');
+        if (DEBUG) console.log('✓ Truck added to scene');
 
         // Add fuel tank sensor with manual position (from state)
         if (fuelTankMesh) {
@@ -1197,11 +1134,13 @@ function DemoVanilla() {
 
           // Add to truck group
           truckGroup.add(fuelSensor.group);
-          console.log('✓ Fuel sensor mounted with manual position');
-          console.log('  - Position:', fuelSensorConfig.position);
-          console.log('  - Rotation:', fuelSensorConfig.rotation.map(r => (r * 180 / Math.PI).toFixed(1) + '°'));
-          console.log('  - Scale:', fuelSensorConfig.scale);
-          console.log('  - Probe length:', fuelSensorConfig.probeLength);
+          if (DEBUG) {
+            console.log('✓ Fuel sensor mounted with manual position');
+            console.log('  - Position:', fuelSensorConfig.position);
+            console.log('  - Rotation:', fuelSensorConfig.rotation.map(r => (r * 180 / Math.PI).toFixed(1) + '°'));
+            console.log('  - Scale:', fuelSensorConfig.scale);
+            console.log('  - Probe length:', fuelSensorConfig.probeLength);
+          }
         }
         
         // Add cargo lock at container back door
@@ -1217,13 +1156,17 @@ function DemoVanilla() {
         
         // Add to truck group
         truckGroup.add(cargoLock.group);
-        console.log('✓ Cargo lock mounted at container back door');
-        console.log('  - Position:', cargoLockConfig.position);
-        console.log('  - Rotation:', cargoLockConfig.rotation.map(r => (r * 180 / Math.PI).toFixed(1) + '°'));
+        if (DEBUG) {
+          console.log('✓ Cargo lock mounted at container back door');
+          console.log('  - Position:', cargoLockConfig.position);
+          console.log('  - Rotation:', cargoLockConfig.rotation.map(r => (r * 180 / Math.PI).toFixed(1) + '°'));
+        }
       },
       (progress) => {
-        const percent = (progress.loaded / progress.total * 100).toFixed(0);
-        console.log(`📦 Loading: ${percent}%`);
+        if (DEBUG) {
+          const percent = (progress.loaded / progress.total * 100).toFixed(0);
+          console.log(`📦 Loading: ${percent}%`);
+        }
       },
       (error) => {
         console.error('❌ Error loading truck model:', error);
@@ -1288,7 +1231,7 @@ function DemoVanilla() {
         const cameraKeyframes = getCameraKeyframes();
         
         // Debug: Log once per second
-        if (Math.floor(Date.now() / 1000) % 5 === 0 && Math.random() < 0.02) {
+        if (DEBUG && Math.floor(Date.now() / 1000) % 5 === 0 && Math.random() < 0.02) {
           console.log('🎥 Camera scroll:', (t * 100).toFixed(1) + '%', 'Dragging:', isUserDraggingRef.current);
         }
         
@@ -1454,31 +1397,6 @@ function DemoVanilla() {
         controls.target.lerp(currentTarget, 0.15);
       }
 
-      // Rotate wheels
-      wheelRotation += delta * wheelConfig.rotationSpeed;
-      
-      if (wheelRefs.axle001_A) {
-        wheelRefs.axle001_A.rotation.x = wheelRotation;
-      }
-      if (wheelRefs.axle001_B) {
-        wheelRefs.axle001_B.rotation.x = wheelRotation;
-      }
-      if (wheelRefs.axle003) {
-        wheelRefs.axle003.rotation.x = wheelRotation;
-      }
-      if (wheelRefs.Obj_axle004) {
-        wheelRefs.Obj_axle004.rotation.x = wheelRotation;
-      }
-      if (wheelRefs.axle004) {
-        wheelRefs.axle004.rotation.x = wheelRotation;
-      }
-      if (wheelRefs.axle005) {
-        wheelRefs.axle005.rotation.x = wheelRotation;
-      }
-      if (wheelRefs.axle006) {
-        wheelRefs.axle006.rotation.x = wheelRotation;
-      }
-
       // Animate road - 60 km/h speed
       // 60 km/h = 16.67 m/s
       // Road texture scale factor for realistic speed
@@ -1490,39 +1408,53 @@ function DemoVanilla() {
     }
 
     // ===== WINDOW RESIZE =====
-    // ===== SCROLL HANDLER =====
+    // ===== SCROLL HANDLER (OPTIMIZED with RAF throttling) =====
     let hornTriggered = false;
     let prevScroll = 0;
+    let scrollTicking = false; // RAF throttle flag
     
     const handleScroll = () => {
-      const total = document.documentElement.scrollHeight - window.innerHeight;
-      const rawScroll = Math.min(Math.max(window.scrollY / total, 0), 1);
-      
-      // Trigger horn on first scroll (when user starts scrolling from 0)
-      if (!hornTriggered && prevScroll === 0 && rawScroll > 0) {
-        if (audioSysRef.current?.masterGain && audioSysRef.current.masterGain.gain.value > 0) {
-          audioSysRef.current.triggerHorn();
-          hornTriggered = true;
-          console.log('🎺 Horn triggered on first scroll');
-        }
+      // OPTIMIZED: Throttle with requestAnimationFrame (60 FPS max)
+      // Prevents excessive scroll handler calls (can fire 100+ times/sec)
+      if (!scrollTicking) {
+        window.requestAnimationFrame(() => {
+          const total = document.documentElement.scrollHeight - window.innerHeight;
+          const rawScroll = Math.min(Math.max(window.scrollY / total, 0), 1);
+          
+          // Trigger horn on first scroll (when user starts scrolling from 0)
+          if (!hornTriggered && prevScroll === 0 && rawScroll > 0) {
+            if (audioSysRef.current?.masterGain && audioSysRef.current.masterGain.gain.value > 0) {
+              audioSysRef.current.triggerHorn();
+              hornTriggered = true;
+              if (DEBUG) console.log('🎺 Horn triggered on first scroll');
+            }
+          }
+          
+          prevScroll = rawScroll;
+          scrollRef.current.current = rawScroll;
+          if (DEBUG) console.log('📜 Scroll:', (rawScroll * 100).toFixed(1) + '%', 'scrollY:', window.scrollY, 'Total:', total);
+          
+          scrollTicking = false; // Reset flag for next scroll event
+        });
+        scrollTicking = true; // Set flag to prevent multiple RAF calls
       }
-      
-      prevScroll = rawScroll;
-      scrollRef.current.current = rawScroll;
-      console.log('📜 Scroll:', (rawScroll * 100).toFixed(1) + '%', 'scrollY:', window.scrollY, 'Total:', total);
     };
     
     // Test if scroll event works
-    window.addEventListener('scroll', () => {
-      console.log('� iSCROLL EVENT FIRED! scrollY:', window.scrollY);
-    }, { passive: true });
+    if (DEBUG) {
+      window.addEventListener('scroll', () => {
+        console.log('🔄 SCROLL EVENT FIRED! scrollY:', window.scrollY);
+      }, { passive: true });
+    }
     
     window.addEventListener('scroll', handleScroll, { passive: true });
     
     // Log initial scroll height
-    console.log('📏 Initial scroll height:', document.documentElement.scrollHeight);
-    console.log('📏 Viewport height:', window.innerHeight);
-    console.log('📏 Can scroll?', document.documentElement.scrollHeight > window.innerHeight);
+    if (DEBUG) {
+      console.log('📏 Initial scroll height:', document.documentElement.scrollHeight);
+      console.log('📏 Viewport height:', window.innerHeight);
+      console.log('📏 Can scroll?', document.documentElement.scrollHeight > window.innerHeight);
+    }
 
     const handleResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -1545,7 +1477,7 @@ function DemoVanilla() {
           audioSysRef.current.toggleMute(false);
           setIsMuted(false);
           audioActivated = true;
-          console.log('🔊 Audio activated by click');
+          if (DEBUG) console.log('🔊 Audio activated by click');
         }
       }
     };
@@ -1553,7 +1485,7 @@ function DemoVanilla() {
     document.addEventListener('click', handleViewportClick);
 
     // Start animation
-    console.log('🎬 Starting animation loop...');
+    if (DEBUG) console.log('🎬 Starting animation loop...');
     animate();
 
     // Cleanup
