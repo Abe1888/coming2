@@ -432,6 +432,10 @@ function AudioControls({ isMuted, onToggleAudio, onTriggerHorn }: AudioControlsP
 function DemoVanilla() {
   const mountRef = useRef<HTMLDivElement>(null);
   
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  
   // Audio system
   const audioSysRef = useRef<AudioSystem | null>(null);
   const [isMuted, setIsMuted] = useState(true);
@@ -1005,6 +1009,11 @@ function DemoVanilla() {
       '/model/Main_truck_updated_compressed.glb', // Updated OBJ with better naming (1.48 MB)
       (gltf) => {
         if (DEBUG) console.log('✅ Truck model loaded successfully!');
+        
+        // Hide loading screen after model is loaded and processed
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 500); // Small delay to ensure everything is rendered
         const model = gltf.scene;
         
         // DEBUG: Log all mesh names to find fuel tank
