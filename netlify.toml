@@ -1,41 +1,38 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
+# Netlify Configuration for Translink Fuel Level Sensor Pro
 
+[build]
+  # Build command
+  command = "npm run build"
+  
+  # Directory with the build output
+  publish = "dist"
+  
+  # Node version
+  environment = { NODE_VERSION = "18" }
+
+# Redirect rules for SPA
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-[build.environment]
-  NODE_VERSION = "18"
-
-# Headers for better performance
+# Headers for security and performance
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
 
+# Cache static assets
 [[headers]]
-  for = "/model/*"
+  for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# Cache fonts
 [[headers]]
-  for = "/*.glb"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-    Content-Type = "model/gltf-binary"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.css"
+  for = "/*.woff2"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"

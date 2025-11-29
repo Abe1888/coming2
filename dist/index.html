@@ -3,51 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Demo Truck - Vanilla Three.js</title>
-    
-    <!-- Preload critical 3D assets for faster loading -->
-    <link rel="preload" href="/model/Main_truck_updated_compressed.glb" as="fetch" crossorigin="anonymous">
-    <link rel="preconnect" href="https://www.gstatic.com">
-    <link rel="dns-prefetch" href="https://www.gstatic.com">
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <title>Translink Solutions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      body {
-        margin: 0;
-        overflow-y: scroll; /* Keep scroll functionality */
-        overflow-x: hidden;
-        background-color: #ebebeb;
-        font-family: 'Inter', sans-serif;
-      }
-      
-      /* Hide scrollbar completely while keeping scroll functionality */
-      /* For Webkit browsers (Chrome, Safari, Edge) */
-      ::-webkit-scrollbar {
-        width: 0;
-        height: 0;
-        display: none;
-      }
-      
-      /* For Firefox */
-      * {
-        scrollbar-width: none;
-      }
-      
-      /* For IE and Edge Legacy */
-      body {
-        -ms-overflow-style: none;
-      }
+      body { margin: 0; overflow-x: hidden; background-color: black; }
+      /* Custom scrollbar for a tech feel */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #000; }
+      ::-webkit-scrollbar-thumb { background: #331111; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #ff0000; }
     </style>
-    <script type="module" crossorigin src="/assets/main-Bwguc-vW.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/client-DYDkQYN6.js">
+    <script type="module" crossorigin src="/assets/index-DQy3uWhI.js"></script>
   </head>
   <body>
-    <div id="root"></div>
-    
-    <!-- Scrollable spacer for camera animation (500vh = 5x viewport height) -->
-    <div style="height: 500vh; pointer-events: none;"></div>
-    
+    <div id="root"></div>
   </body>
 </html>
