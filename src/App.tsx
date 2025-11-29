@@ -4,29 +4,300 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
-// Simple audio system (keeping from original)
+// --- AUDIO SYSTEM (ENHANCED) ---
 class AudioSystem {
   ctx: AudioContext | null = null;
   masterGain: GainNode | null = null;
+  
+  // Engine Components
+  engineRefs: {
+    rumbleFilter?: BiquadFilterNode;
+    pistonOsc?: OscillatorNode;
+    pistonLFO?: OscillatorNode;
+  } = {};
+
+  // Ambience Components
+  windRefs: {
+    roadGain?: GainNode;
+    windGain?: GainNode;
+  } = {};
+
+  scannerNode: AudioBufferSourceNode | null = null;
+  scannerGain: GainNode | null = null;
+
+  hornOsc1: OscillatorNode | null = null;
+  hornOsc2: OscillatorNode | null = null;
+  hornGain: GainNode | null = null;
+
   initialized = false;
 
   init() {
     if (this.initialized) return;
+    
+    // Create Context
     const AC = window.AudioContext || (window as any).webkitAudioContext;
     this.ctx = new AC();
+    
+    // Master Gain (Volume Control)
     this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = 0;
+    this.masterGain.gain.value = 0; // Start muted
     this.masterGain.connect(this.ctx.destination);
+
+    this.setupEngine();
+    this.setupAmbience();
+    this.setupScanner();
+    this.setupHorn();
+    
     this.initialized = true;
   }
 
   toggleMute(isMuted: boolean) {
     if (!this.initialized) this.init();
     if (this.ctx?.state === 'suspended') this.ctx.resume();
+    
     if (this.masterGain && this.ctx) {
-      const now = this.ctx.currentTime;
-      this.masterGain.gain.setTargetAtTime(isMuted ? 0 : 0.25, now, 0.3);
+        const now = this.ctx.currentTime;
+        this.masterGain.gain.setTargetAtTime(isMuted ? 0 : 0.25, now, 0.3);
     }
+  }
+
+  createNoiseBuffer(type: 'pink' | 'brown') {
+    if (!this.ctx) return null;
+    const bufferSize = this.ctx.sampleRate * 2;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    if (type === 'pink') {
+        let b0, b1, b2, b3, b4, b5, b6;
+        b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.96900 * b2 + white * 0.1538520;
+            b3 = 0.86650 * b3 + white * 0.3104856;
+            b4 = 0.55000 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.0168980;
+            data[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+            data[i] *= 0.11; 
+            b6 = white * 0.115926;
+        }
+    } else {
+        let lastOut = 0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            data[i] = (lastOut + (0.02 * white)) / 1.02;
+            lastOut = data[i];
+            data[i] *= 3.5; 
+        }
+    }
+    return buffer;
+  }
+
+  setupEngine() {
+      if (!this.ctx || !this.masterGain) return;
+      
+      const brownNoise = this.createNoiseBuffer('brown');
+      if (brownNoise) {
+          const src = this.ctx.createBufferSource();
+          src.buffer = brownNoise;
+          src.loop = true;
+          
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = 100;
+
+          const gain = this.ctx.createGain();
+          gain.gain.value = 0.4;
+
+          src.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.masterGain);
+          src.start();
+          
+          this.engineRefs.rumbleFilter = filter;
+      }
+
+      const pistonOsc = this.ctx.createOscillator();
+      pistonOsc.type = 'sawtooth';
+      pistonOsc.frequency.value = 60;
+
+      const pistonGain = this.ctx.createGain();
+      pistonGain.gain.value = 0;
+
+      const pistonLFO = this.ctx.createOscillator();
+      pistonLFO.type = 'sine';
+      pistonLFO.frequency.value = 12;
+
+      const lfoScaler = this.ctx.createGain();
+      lfoScaler.gain.value = 0.15;
+      pistonLFO.connect(lfoScaler);
+      lfoScaler.connect(pistonGain.gain);
+      
+      const pistonFilter = this.ctx.createBiquadFilter();
+      pistonFilter.type = 'lowpass';
+      pistonFilter.frequency.value = 400;
+
+      pistonOsc.connect(pistonFilter);
+      pistonFilter.connect(pistonGain);
+      pistonGain.connect(this.masterGain);
+
+      pistonOsc.start();
+      pistonLFO.start();
+
+      this.engineRefs.pistonOsc = pistonOsc;
+      this.engineRefs.pistonLFO = pistonLFO;
+  }
+
+  setupAmbience() {
+      if (!this.ctx || !this.masterGain) return;
+      
+      const pinkNoise = this.createNoiseBuffer('pink');
+      if (!pinkNoise) return;
+
+      const roadSrc = this.ctx.createBufferSource();
+      roadSrc.buffer = pinkNoise;
+      roadSrc.loop = true;
+
+      const roadFilter = this.ctx.createBiquadFilter();
+      roadFilter.type = 'lowpass';
+      roadFilter.frequency.value = 350;
+      
+      const roadGain = this.ctx.createGain();
+      roadGain.gain.value = 0.2;
+
+      roadSrc.connect(roadFilter);
+      roadFilter.connect(roadGain);
+      roadGain.connect(this.masterGain);
+      roadSrc.start();
+      
+      this.windRefs.roadGain = roadGain;
+
+      const windSrc = this.ctx.createBufferSource();
+      windSrc.buffer = pinkNoise;
+      windSrc.loop = true;
+
+      const windFilter = this.ctx.createBiquadFilter();
+      windFilter.type = 'bandpass';
+      windFilter.frequency.value = 600;
+      windFilter.Q.value = 0.3;
+
+      const windGain = this.ctx.createGain();
+      windGain.gain.value = 0.08;
+
+      windSrc.connect(windFilter);
+      windFilter.connect(windGain);
+      windGain.connect(this.masterGain);
+      windSrc.start();
+
+      this.windRefs.windGain = windGain;
+  }
+
+  setupScanner() {
+      if (!this.ctx || !this.masterGain) return;
+      
+      const bufferSize = this.ctx.sampleRate * 0.5;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * 0.5;
+      }
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      noise.loop = true;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 2500; 
+      filter.Q.value = 8; 
+
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0; 
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      noise.start();
+      
+      this.scannerNode = noise;
+      this.scannerGain = gain;
+  }
+
+  setupHorn() {
+    if (!this.ctx || !this.masterGain) return;
+    
+    const osc1 = this.ctx.createOscillator();
+    osc1.type = 'sawtooth';
+    osc1.frequency.value = 185;
+    
+    const osc2 = this.ctx.createOscillator();
+    osc2.type = 'sawtooth';
+    osc2.frequency.value = 233;
+
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.masterGain);
+    
+    osc1.start();
+    osc2.start();
+    
+    this.hornOsc1 = osc1;
+    this.hornOsc2 = osc2;
+    this.hornGain = gain;
+  }
+
+  triggerHorn() {
+    if (!this.ctx || !this.hornGain) return;
+    const now = this.ctx.currentTime;
+    
+    this.hornGain.gain.cancelScheduledValues(now);
+    this.hornGain.gain.setValueAtTime(0, now);
+    
+    this.hornGain.gain.linearRampToValueAtTime(0.8, now + 0.1);
+    this.hornGain.gain.linearRampToValueAtTime(0.8, now + 0.8);
+    this.hornGain.gain.linearRampToValueAtTime(0, now + 1.0);
+    
+    this.hornGain.gain.linearRampToValueAtTime(0.8, now + 1.2);
+    this.hornGain.gain.linearRampToValueAtTime(0.8, now + 1.5);
+    this.hornGain.gain.linearRampToValueAtTime(0, now + 1.8);
+  }
+
+  triggerChirp() {
+    if (!this.ctx || !this.masterGain || this.masterGain.gain.value < 0.01) return;
+    const t = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(2000, t);
+    osc.frequency.exponentialRampToValueAtTime(1000, t + 0.1);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.05, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.2);
+  }
+
+  update(time: number) {
+      if (!this.ctx || this.ctx.state === 'suspended') return;
+      
+      if (this.engineRefs.pistonLFO) {
+         this.engineRefs.pistonLFO.frequency.value = 12 + Math.sin(time * 0.3) * 0.5;
+      }
+      if (this.engineRefs.rumbleFilter) {
+          this.engineRefs.rumbleFilter.frequency.value = 100 + Math.sin(time * 0.15) * 5;
+      }
+
+      if (this.windRefs.windGain) {
+          this.windRefs.windGain.gain.value = 0.10 + Math.sin(time * 0.2) * 0.02;
+      }
   }
 }
 
@@ -565,6 +836,21 @@ export default function App() {
         model.position.set(1.1, -1.1, -5.3);
         model.scale.set(1.50, 1.50, 1.50);
         
+        // === DEBUG: LIST ALL MESHES IN GLB ===
+        console.log('📦 GLB MODEL LOADED - Listing all meshes:');
+        console.log('═══════════════════════════════════════════');
+        const allMeshes: string[] = [];
+        model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            allMeshes.push(child.name);
+            console.log(`  🔹 ${child.name} (type: ${child.type}, children: ${child.children.length})`);
+          }
+        });
+        console.log('═══════════════════════════════════════════');
+        console.log(`📊 Total meshes found: ${allMeshes.length}`);
+        console.log('📋 All mesh names:', allMeshes.join(', '));
+        console.log('═══════════════════════════════════════════\n');
+        
         // Apply white/light gray materials
         model.traverse((child) => {
           if (child instanceof THREE.Mesh) {
@@ -598,6 +884,9 @@ export default function App() {
               }
             }
             
+            // Check for logo mesh
+            const isLogo = nameLower.includes('logo');
+            
             // Check for glass meshes (windows, windshield)
             const isGlass = nameLower.includes('glass') || 
                            nameLower.includes('window') ||
@@ -609,7 +898,64 @@ export default function App() {
                                nameLower.includes('fuel') ||
                                nameLower.includes('cylinder');
             
-            if (isGlass) {
+            if (isLogo) {
+              // Make the circular face invisible
+              child.material = new THREE.MeshBasicMaterial({
+                transparent: true,
+                opacity: 0,
+                side: THREE.DoubleSide
+              });
+              
+              // Create a plane with the logo PNG in front of the circular face
+              const textureLoader = new THREE.TextureLoader();
+              textureLoader.load(
+                '/logo-front-truck.png',
+                (texture) => {
+                  texture.colorSpace = THREE.SRGBColorSpace;
+                  
+                  // Get the size of the circular face
+                  child.geometry.computeBoundingBox();
+                  const bbox = child.geometry.boundingBox;
+                  if (bbox) {
+                    const width = bbox.max.x - bbox.min.x;
+                    const height = bbox.max.y - bbox.min.y;
+                    
+                    // Create a plane geometry matching the circular face size
+                    const planeGeometry = new THREE.PlaneGeometry(width, height);
+                    const planeMaterial = new THREE.MeshBasicMaterial({
+                      map: texture,
+                      transparent: true,
+                      alphaTest: 0.1,
+                      side: THREE.DoubleSide,
+                      toneMapped: false
+                    });
+                    
+                    const logoPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+                    
+                    // Position the plane in front of the circular face
+                    // Copy position and rotation from the circular face
+                    logoPlane.position.copy(child.position);
+                    logoPlane.rotation.copy(child.rotation);
+                    logoPlane.quaternion.copy(child.quaternion);
+                    
+                    // Move forward in front of the mesh (increased offset)
+                    logoPlane.position.z += 0.5;
+                    
+                    // Add to the same parent as the circular face
+                    if (child.parent) {
+                      child.parent.add(logoPlane);
+                    }
+                    
+                    console.log('✓ Logo plane created in front of circular face:', child.name);
+                  }
+                },
+                undefined,
+                (error) => console.error('Error loading logo texture:', error)
+              );
+              
+              child.castShadow = false;
+              child.receiveShadow = false;
+            } else if (isGlass) {
               // Create transparent glass material
               child.material = new THREE.MeshStandardMaterial({ 
                 color: 0xccddff, // Light blue tint
@@ -907,9 +1253,24 @@ export default function App() {
       animationFrameId = requestAnimationFrame(animate);
     };
 
+    let hornTriggered = false;
+    let prevScroll = 0;
+
     const handleScroll = () => {
       const total = document.documentElement.scrollHeight - window.innerHeight;
       scrollRef.current = Math.min(Math.max(window.scrollY / total, 0), 1);
+      
+      // Trigger horn on first scroll (when user starts scrolling from 0)
+      // Check if audio is enabled by checking masterGain value instead of isMuted state
+      if (!hornTriggered && prevScroll === 0 && scrollRef.current > 0) {
+        if (audioSysRef.current?.masterGain && audioSysRef.current.masterGain.gain.value > 0) {
+          audioSysRef.current.triggerHorn();
+          hornTriggered = true;
+          console.log('🎺 Horn triggered on first scroll!');
+        }
+      }
+      
+      prevScroll = scrollRef.current;
     };
 
     const handleResize = () => {
@@ -920,16 +1281,42 @@ export default function App() {
 
     window.addEventListener('scroll', handleScroll);
     window.addEventListener('resize', handleResize);
+
+    // Enable audio on first click anywhere on the page
+    let audioActivated = false;
+    const handleViewportClick = () => {
+        if (!audioActivated && audioSysRef.current) {
+            // Initialize audio if not already initialized
+            if (!audioSysRef.current.initialized) {
+                audioSysRef.current.init();
+            }
+            
+            // Check if audio is currently off by checking masterGain
+            if (audioSysRef.current.masterGain && audioSysRef.current.masterGain.gain.value === 0) {
+                audioSysRef.current.toggleMute(false);
+                setIsMuted(false);
+                audioActivated = true;
+                console.log('🔊 Audio activated by click');
+            }
+        }
+    };
+    // Attach to document to catch clicks anywhere (including through overlays)
+    document.addEventListener('click', handleViewportClick);
+
     animate();
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleResize);
+      document.removeEventListener('click', handleViewportClick);
       cancelAnimationFrame(animationFrameId);
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
       renderer.dispose();
+      if (audioSysRef.current && audioSysRef.current.ctx) {
+        audioSysRef.current.ctx.close();
+      }
     };
   }, []);
 
